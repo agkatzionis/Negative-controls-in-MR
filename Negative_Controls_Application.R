@@ -57,6 +57,12 @@ colnames(MR_results_standard) <- c("Exposure", "Outcome", "nSNP", "IVW_beta", "I
                                    "Mode_beta", "Mode_se", "Mode_p", "wMode_beta", "wMode_se", "wMode_p")
 MR_results_weighted <- MR_results_standard
 
+## Store F statistics here.
+MR_results_fstat <- data.frame("Exposure" = rep(trait_files$Trait[1:19], each = 20),
+                               "Outcome" = rep(trait_files$Trait, times = 19),
+                               "F_stat_standard" = rep(NA, 19*20), 
+                               "F_stat_weighted" = rep(NA, 19*20))
+
 ## ---------- RUN THE ANALYSIS ---------- ##
 
 ## Loop through exposures and run MR.
@@ -108,6 +114,7 @@ for (I in 1:19) {
     
     ## Run the MR analysis.
     mr_results <- mr(both_data)
+    Fstat_standard <- mean( both_data$beta.exposure^2 / both_data$se.exposure^2 )
     
     ## Store results
     MR_results_standard[20 * (I-1) + J, 3] <- mr_results[3, 6]
@@ -116,6 +123,7 @@ for (I in 1:19) {
     MR_results_standard[20 * (I-1) + J, 10:12] <- mr_results[2, 7:9]
     MR_results_standard[20 * (I-1) + J, 13:15] <- mr_results[4, 7:9]
     MR_results_standard[20 * (I-1) + J, 16:18] <- mr_results[5, 7:9]
+    MR_results_fstat[20 * (I-1) + J, 3] <- Fstat_standard
     
     ## ---------- WEIGHTED GWAS ---------- ##
     
@@ -132,6 +140,7 @@ for (I in 1:19) {
     
     ## Run the MR analysis.
     mr_results_w <- mr(both_data_w)
+    Fstat_weighted <- mean( both_data_w$beta.exposure^2 / both_data_w$se.exposure^2 )
     
     ## Store results
     MR_results_weighted[20 * (I-1) + J, 3] <- mr_results_w[3, 6]
@@ -140,6 +149,7 @@ for (I in 1:19) {
     MR_results_weighted[20 * (I-1) + J, 10:12] <- mr_results_w[2, 7:9]
     MR_results_weighted[20 * (I-1) + J, 13:15] <- mr_results_w[4, 7:9]
     MR_results_weighted[20 * (I-1) + J, 16:18] <- mr_results_w[5, 7:9]
+    MR_results_fstat[20 * (I-1) + J, 4] <- Fstat_weighted
     
   }
 }
@@ -150,8 +160,16 @@ for (I in 1:19) {
 #load("Application_Schoeler.RData")
 
 ## Restrict to exposures with at least 10 SNPs.
+MR_results_fstat10 <- MR_results_fstat[which(MR_results_standard$nSNP > 10), ]
 MR_results_standard10 <- MR_results_standard[which(MR_results_standard$nSNP > 10), ]
 MR_results_weighted10 <- MR_results_weighted[which(MR_results_weighted$nSNP > 10), ]
+
+## Check instrument strength.
+MR_results_fstat10
+## All above 10, though some just above. Using the 
+## weighted GWAS reduces the F stats, which is not 
+## unexpected since instruments are selected in the 
+## unweighted one. Still, no cause for concern.
 
 ## Effects of the various traits on sex (standard GWAS).
 MR_results_standard10[1:13 * 19, 1:6]
@@ -834,15 +852,15 @@ for (I in 1:19) {
 ## exposures without many SNPs to instrument them.
 
 ## Save results.
-save(MR_results_standard, MR_results_weighted, trait_files, ps_snps,
-     MR_results_standard_noP, MR_results_weighted_noP, 
+save(MR_results_standard, MR_results_weighted, MR_results_fstat, trait_files,
+     ps_snps, MR_results_standard_noP, MR_results_weighted_noP, 
      MR_results_standard_mtc, MR_results_weighted_mtc, z_data_tsmr, YY0_est,
-     MR_results_standard_mrlap, MR_results_weighted_mrlap, file = "Application_Schoeler.RData")
+     MR_results_standard_mrlap, MR_results_weighted_mrlap, file = "Negative_Controls_Application.RData")
 
 ## ---------- DIAGNOSTICS ---------- ##
 
 ## Load the data, if needed.
-#load("Application_Schoeler.RData")
+#load("Negative_Controls_Application.RData")
 
 ## Informal diagnostics: differences between unadjusted and
 ## adjusted MRlap estimates for each exposure-oucome pair.
