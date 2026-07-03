@@ -22,6 +22,8 @@ library(usethis)
 library(MRlap)
 library(openxlsx)
 library(gt)
+library(flextable)
+library(officer)
 
 ## The TwoSampleMR package needs authentication - see:
 ## https://mrcieu.github.io/ieugwasr/articles/guide.html#authentication
@@ -921,6 +923,198 @@ MR_mrlap2$ci_75 <- ifelse(MR_mrlap2$beta_diff > 0,
 MR_mrlap2[which(MR_mrlap2$ci_overlap == FALSE), ]
 MR_mrlap2[which(MR_mrlap2$ci_75 == FALSE), ]
 ## Very little changes.
+
+##################################################
+
+##########   HAIR COLOUR AS NCO 1   ##########
+
+## As an additional analysis, we extract data on 
+## natural hair color from opengwas and use it as 
+## an additional negative control variable. The 
+## use of natural hair color as NCO was considered
+## e.g. in Sanderson et al. (2020).
+
+## Note that the Schoeler et al. (2023) study used
+## only a subset of the UK Biobank data for their
+## analysis so there is some difference between
+## their sample and the one we use for hair color.
+
+## Finally, the UKB GWAS has five "hair color" 
+## variables, which are indicators for blond, red,
+## light brown, dark brown and black hair.
+## We use each of them separately as outcome.
+
+## Create tables where results will be stored.
+MR_results_hc <- data.frame(trait_files$Trait[1:19], rep("hair_color", 19), matrix(NA, 19, 25))
+colnames(MR_results_hc) <- c("Exposure", "Outcome", "blond_nSNP", "blond_beta", "blond_se", "blond_p", "blond_f",
+                             "red_nSNP", "red_beta", "red_se", "red_p", "red_f","lb_nSNP", "lb_beta", "lb_se", "lb_p", "lb_f",
+                             "db_nSNP", "db_beta", "db_se", "db_p", "db_f", "black_nSNP", "black_beta", "black_se", "black_p", "black_f")
+
+## ---------- RUN THE ANALYSIS ---------- ##
+
+## Loop through exposures and run MR.
+for (I in 1:19) {
+  
+  ## Report progress.
+  print(paste("Analyzing data on exposure ", trait_files$Trait[I], ".", sep = ""))
+  
+  ## Load standard GWAS data for the exposure.
+  exp_file <- paste(trait_files$Filename[I], "_standard.tsv", sep = "")
+  gwas <- read.table(file = exp_file, sep = '\t', header = TRUE)
+  
+  ## Get GWAS hits, convert to TwoSampleMR format and clump.
+  exp_data <- gwas[which(gwas$p_value < 5e-8), ]
+  exp_data_tsmr <- format_data(exp_data, type = "exposure", snp_col = "variant_id", beta_col = "beta", se_col = "standard_error", eaf_col = "EAF", pval_col = "p_value", samplesize_col = "N", chr_col = "chromosome", pos_col = "base_pair_location")
+  exp_data_tsmr <- clump_data(exp_data_tsmr)
+  gwas_hits <- as.character(exp_data_tsmr$SNP)
+  exp_data <- exp_data[which(exp_data$variant_id %in% as.character(exp_data_tsmr$SNP)), ]
+  
+  ## Run the analysis for hair color: blond.
+  outcome_dat <- extract_outcome_data(snps = exp_data$variant_id, outcomes = "ukb-d-1747_1")
+  both_data <- harmonise_data(exp_data_tsmr, outcome_dat)
+  mr_results <- mr(both_data)
+  Fstat <- mean( both_data$beta.exposure^2 / both_data$se.exposure^2 )
+  MR_results_hc[I, 3:6] <- mr_results[3, 6:9]
+  MR_results_hc[I, 7] <- Fstat
+
+  ## Run the analysis for hair color: red.
+  outcome_dat <- extract_outcome_data(snps = exp_data$variant_id, outcomes = "ukb-d-1747_2")
+  both_data <- harmonise_data(exp_data_tsmr, outcome_dat)
+  mr_results <- mr(both_data)
+  Fstat <- mean( both_data$beta.exposure^2 / both_data$se.exposure^2 )
+  MR_results_hc[I, 8:11] <- mr_results[3, 6:9]
+  MR_results_hc[I, 12] <- Fstat
+  
+  ## Run the analysis for hair color: light brown.
+  outcome_dat <- extract_outcome_data(snps = exp_data$variant_id, outcomes = "ukb-d-1747_3")
+  both_data <- harmonise_data(exp_data_tsmr, outcome_dat)
+  mr_results <- mr(both_data)
+  Fstat <- mean( both_data$beta.exposure^2 / both_data$se.exposure^2 )
+  MR_results_hc[I, 13:16] <- mr_results[3, 6:9]
+  MR_results_hc[I, 17] <- Fstat
+  
+  ## Run the analysis for hair color: dark brown.
+  outcome_dat <- extract_outcome_data(snps = exp_data$variant_id, outcomes = "ukb-d-1747_4")
+  both_data <- harmonise_data(exp_data_tsmr, outcome_dat)
+  mr_results <- mr(both_data)
+  Fstat <- mean( both_data$beta.exposure^2 / both_data$se.exposure^2 )
+  MR_results_hc[I, 18:21] <- mr_results[3, 6:9]
+  MR_results_hc[I, 22] <- Fstat
+  
+  ## Run the analysis for hair color: black.
+  outcome_dat <- extract_outcome_data(snps = exp_data$variant_id, outcomes = "ukb-d-1747_5")
+  both_data <- harmonise_data(exp_data_tsmr, outcome_dat)
+  mr_results <- mr(both_data)
+  Fstat <- mean( both_data$beta.exposure^2 / both_data$se.exposure^2 )
+  MR_results_hc[I, 23:26] <- mr_results[3, 6:9]
+  MR_results_hc[I, 27] <- Fstat
+  
+}
+
+## Save results.
+save(MR_results_standard, MR_results_weighted, MR_results_fstat, trait_files,
+     ps_snps, MR_results_standard_noP, MR_results_weighted_noP, 
+     MR_results_standard_mtc, MR_results_weighted_mtc, z_data_tsmr, YY0_est,
+     MR_results_standard_mrlap, MR_results_weighted_mrlap, 
+     MR_results_hc, file = "Negative_Controls_Application.RData")
+
+## ---------- ASSESS IVW RESULTS ---------- ##
+
+## Load the data, if needed.
+#load("Negative_Controls_Application.RData")
+
+## Inspect p-values of association with each colour.
+MR_results_hc[, c(1, 6, 11, 16, 21, 26)]
+## Mixed pattern of results.
+
+##################################################
+
+##########   HAIR COLOUR AS NCO 2   ##########
+
+## We repeat the analysis using summary statistics
+## from the Sanderson et al. (2021) study.
+
+## Create tables where results will be stored.
+MR_results_hc2 <- data.frame(trait_files$Trait[1:19], rep("hair_color", 19), matrix(NA, 19, 5))
+colnames(MR_results_hc2) <- c("Exposure", "Outcome", "hc_nSNP", "hc_beta", "hc_se", "hc_p", "hc_f")
+
+## ---------- RUN THE ANALYSIS ---------- ##
+
+## Load GWAS data for the outcome (once).
+gwas_hc <- read.table(file = "hair_colour_imputed_summarystats.txt", sep = '\t', header = TRUE)
+
+## Loop through exposures and run MR.
+for (I in 1:19) {
+  
+  ## Report progress.
+  print(paste("Analyzing data on exposure ", trait_files$Trait[I], ".", sep = ""))
+  
+  ## Load standard GWAS data for the exposure.
+  exp_file <- paste(trait_files$Filename[I], "_standard.tsv", sep = "")
+  gwas <- read.table(file = exp_file, sep = '\t', header = TRUE)
+  
+  ## Get GWAS hits, convert to TwoSampleMR format and clump.
+  exp_data <- gwas[which(gwas$p_value < 5e-8), ]
+  exp_data_tsmr <- format_data(exp_data, type = "exposure", snp_col = "variant_id", beta_col = "beta", se_col = "standard_error", eaf_col = "EAF", pval_col = "p_value", samplesize_col = "N", chr_col = "chromosome", pos_col = "base_pair_location")
+  exp_data_tsmr <- clump_data(exp_data_tsmr)
+  gwas_hits <- as.character(exp_data_tsmr$SNP)
+  exp_data <- exp_data[which(exp_data$variant_id %in% as.character(exp_data_tsmr$SNP)), ]
+  
+  ## Extract data for these SNPs from the outcome GWAS.
+  out_data <- gwas_hc[which(gwas_hc$SNP %in% exp_data$variant_id), ]
+  out_data_tsmr <- format_data(out_data, type = "outcome", snp_col = "SNP", beta_col = "BETA", se_col = "SE", eaf_col = "A1FREQ", pval_col = "P_LINREG", chr_col = "CHR", pos_col = "BP", effect_allele = "ALLELE1", other_allele = "ALLELE0")
+  both_data <- harmonise_data(exp_data_tsmr, out_data_tsmr)
+  mr_results <- mr(both_data)
+  Fstat <- mean( both_data$beta.exposure^2 / both_data$se.exposure^2 )
+  MR_results_hc2[I, 3:6] <- mr_results[3, 6:9]
+  MR_results_hc2[I, 7] <- Fstat
+  
+}
+
+## Save results.
+rm(gwas, gwas_hc)
+save(MR_results_standard, MR_results_weighted, MR_results_fstat, trait_files,
+     ps_snps, MR_results_standard_noP, MR_results_weighted_noP, 
+     MR_results_standard_mtc, MR_results_weighted_mtc, z_data_tsmr, YY0_est,
+     MR_results_standard_mrlap, MR_results_weighted_mrlap, 
+     MR_results_hc, MR_results_hc2, file = "Negative_Controls_Application.RData")
+
+## ---------- ASSESS IVW RESULTS ---------- ##
+
+## Load the data, if needed.
+#load("Negative_Controls_Application.RData")
+
+## Inspect results.
+MR_results_hc2
+
+
+## Make a table with betas and p-values.
+Pval_table <- matrix(NA, 19, 14)
+rownames(Pval_table) <- MR_results_standard[0:18 * 20 + 1, 1]
+colnames(Pval_table) <- c("sex","p_sex", "blond", "p_blond", "red", "p_red", "lightbrown", "plightbrown",
+                          "darkbrown", "p_darkbrown", "black", "p_black", "cat", "p_cat")
+Pval_table[, 1] <- MR_results_standard[1:19 * 20, 4]
+Pval_table[, 2] <- MR_results_standard[1:19 * 20, 6]
+Pval_table[, 3] <- MR_results_hc[, 4]
+Pval_table[, 4] <- MR_results_hc[, 6]
+Pval_table[, 5] <- MR_results_hc[, 9]
+Pval_table[, 6] <- MR_results_hc[, 11]
+Pval_table[, 7] <- MR_results_hc[, 14]
+Pval_table[, 8] <- MR_results_hc[, 16]
+Pval_table[, 9] <- MR_results_hc[, 19]
+Pval_table[, 10] <- MR_results_hc[, 21]
+Pval_table[, 11] <- MR_results_hc[, 24]
+Pval_table[, 12] <- MR_results_hc[, 26]
+Pval_table[, 13] <- MR_results_hc2[, 4]
+Pval_table[, 14] <- MR_results_hc2[, 6]
+Pval_table <- Pval_table[which(MR_results_hc2$hc_nSNP > 10), ]
+
+## Export to MS Word.
+t1 <- flextable(as.data.frame(apply(Pval_table, 2, function(x) sprintf("%.3f", x))))
+doc <- read_docx()
+doc <- body_add_par(doc, "Table 1", style = "heading 1")
+doc <- body_add_flextable(doc, t1)
+print(doc, target = "NCO_pvalues2.docx")
 
 ##################################################
 
